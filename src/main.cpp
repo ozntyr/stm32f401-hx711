@@ -12,88 +12,229 @@ const int BUTTON_SELECT_PIN = PA2;
 const int BUTTON_UP_PIN = PA3;
 const int BUTTON_DOWN_PIN = PA4;
 
-HX711 scale;
+// Buzzer pin
+const int BUZZER_PIN = PA5;
+
+// Buzzer durations
+const int SHORT_BUZZ_DURATION = 100; // Duration for a short buzz (100ms)
+const int LONG_BUZZ_DURATION = 500;  // Duration for a long buzz (500ms)
 
 // Default values for settings
 #define DEFAULT_CALIBRATION_FACTOR 2280.0f
-#define DEFAULT_SENSOR_READ_COUNT 10
-#define DEFAULT_DISPLAY_DECIMAL 2
-#define DEFAULT_LOOP_DELAY 500
+#define SENSOR_READ_COUNT 10
+#define DISPLAY_DECIMAL 2
+#define LOOP_DELAY 10
+#define READ_DELAY 500
+#define CALIBRATION_MODE_DURATION 2000 // Duration for calibration mode activation
+#define SAVE_PROMPT_DURATION 2000      // Duration for save prompt display
+#define DEBOUNCE_DELAY 50              // Debounce delay in milliseconds
+#define DEBOUNCE_COUNTER_MAX 3
+
+HX711 scale;
 
 float calibration_factor = DEFAULT_CALIBRATION_FACTOR;
-int sensorReadCount = DEFAULT_SENSOR_READ_COUNT;
-int displayDecimal = DEFAULT_DISPLAY_DECIMAL;
-int loopDelay = DEFAULT_LOOP_DELAY;
 
 bool calibrationMode = false;
 int currentDigitIdx = 0;
 float newCalibrationFactor = DEFAULT_CALIBRATION_FACTOR;
 unsigned long buttonPressStartTime = 0;
-const unsigned long CALIBRATION_MODE_DURATION = 2000;
-const unsigned long SAVE_PROMPT_DURATION = 2000;
 
 static bool lastSelectButtonState = HIGH;
 static bool lastUpButtonState = HIGH;
 static bool lastDownButtonState = HIGH;
+
+unsigned long lastReadTime = 0; // The last time the weight was read
+
+unsigned long lastDebounceTimeSelect = 0; // The last time the SELECT button state was checked
+unsigned long lastDebounceTimeUp = 0;     // The last time the UP button state was checked
+unsigned long lastDebounceTimeDown = 0;   // The last time the DOWN button state was checked
+
+int debounceCounterSelect = 0;
+int debounceCounterUp = 0;
+int debounceCounterDown = 0;
+
+bool debounceButtonStateSelect = HIGH;
+bool debounceButtonStateUp = HIGH;
+bool debounceButtonStateDown = HIGH;
+
+void buzz(int duration)
+{
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(duration);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
 void handleCalibrationMode()
 {
   bool upButtonState = digitalRead(BUTTON_UP_PIN);
   bool downButtonState = digitalRead(BUTTON_DOWN_PIN);
+  bool selectButtonState = digitalRead(BUTTON_SELECT_PIN);
 
-  if (digitalRead(BUTTON_SELECT_PIN) == LOW)
+  unsigned long currentTime = millis();
+
+  // Debounce logic for UP button
+  if (upButtonState != debounceButtonStateUp)
   {
-    unsigned long pressDuration = millis() - buttonPressStartTime;
+    lastDebounceTimeUp = currentTime;
+    debounceCounterUp = 0;
+  }
 
-    if (pressDuration > SAVE_PROMPT_DURATION)
+  debounceCounterUp++;
+
+  if ((currentTime - lastDebounceTimeUp) > DEBOUNCE_DELAY && debounceCounterUp > DEBOUNCE_COUNTER_MAX)
+  {
+    if (upButtonState != lastUpButtonState)
     {
-      Serial.println("Do you want to save? Press SELECT again to confirm.");
-      displaySavePrompt(); // Show save prompt on display
-      while (digitalRead(BUTTON_SELECT_PIN) == LOW)
+      if (upButtonState == LOW)
       {
-        // Wait for confirmation
+        // Increment the current digit
+        int factorAsInt = int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10;
+        factorAsInt = (factorAsInt + 1) % 10;
+        newCalibrationFactor += (factorAsInt - (int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10)) * pow(10, currentDigitIdx);
+        Serial.print("New calibration factor: ");
+        Serial.println(newCalibrationFactor, 3);
+        displayCalibrationFactor(newCalibrationFactor, currentDigitIdx); // Update display
+        buzz(SHORT_BUZZ_DURATION);                                       // Short buzz for button press
       }
-      // Confirm and save
-      save_CalibrationFactor(newCalibrationFactor);
-      calibration_factor = newCalibrationFactor;
-      Serial.println("Calibration factor saved.");
-      calibrationMode = false;
-      displayCalibrationFactor(calibration_factor); // Update display
-      return;
+      lastUpButtonState = upButtonState;
     }
   }
 
-  if (upButtonState == LOW && lastUpButtonState == HIGH)
+  // Debounce logic for DOWN button
+  if (downButtonState != debounceButtonStateDown)
   {
-    // Increment the current digit
-    int factorAsInt = int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10;
-    factorAsInt = (factorAsInt + 1) % 10;
-    newCalibrationFactor += (factorAsInt - (int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10)) * pow(10, currentDigitIdx);
-    Serial.print("New calibration factor: ");
-    Serial.println(newCalibrationFactor, 3);
-    displayCalibrationFactor(newCalibrationFactor, currentDigitIdx); // Update display
-  }
-  if (downButtonState == LOW && lastDownButtonState == HIGH)
-  {
-    // Decrement the current digit
-    int factorAsInt = int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10;
-    factorAsInt = (factorAsInt + 9) % 10;
-    newCalibrationFactor += (factorAsInt - (int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10)) * pow(10, currentDigitIdx);
-    Serial.print("New calibration factor: ");
-    Serial.println(newCalibrationFactor, 3);
-    displayCalibrationFactor(newCalibrationFactor, currentDigitIdx); // Update display
-  }
-  if (digitalRead(BUTTON_SELECT_PIN) == HIGH && lastSelectButtonState == LOW)
-  {
-    // Move to the next digit
-    currentDigitIdx = (currentDigitIdx + 1) % 8;
-    Serial.print("Current digit index: ");
-    Serial.println(currentDigitIdx);
-    displayCalibrationFactor(newCalibrationFactor, currentDigitIdx); // Update display
+    lastDebounceTimeDown = currentTime;
+    debounceCounterDown = 0;
   }
 
-  lastUpButtonState = upButtonState;
-  lastDownButtonState = downButtonState;
-  lastSelectButtonState = digitalRead(BUTTON_SELECT_PIN);
+  debounceCounterDown++;
+
+  if ((currentTime - lastDebounceTimeDown) > DEBOUNCE_DELAY && debounceCounterDown > DEBOUNCE_COUNTER_MAX)
+  {
+    if (downButtonState != lastDownButtonState)
+    {
+      if (downButtonState == LOW)
+      {
+        // Decrement the current digit
+        int factorAsInt = int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10;
+        factorAsInt = (factorAsInt + 9) % 10;
+        newCalibrationFactor += (factorAsInt - (int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10)) * pow(10, currentDigitIdx);
+        Serial.print("New calibration factor: ");
+        Serial.println(newCalibrationFactor, 3);
+        displayCalibrationFactor(newCalibrationFactor, currentDigitIdx); // Update display
+        buzz(SHORT_BUZZ_DURATION);                                       // Short buzz for button press
+      }
+      lastDownButtonState = downButtonState;
+    }
+  }
+
+  // Debounce logic for SELECT button
+  if (selectButtonState != debounceButtonStateSelect)
+  {
+    lastDebounceTimeSelect = currentTime;
+    debounceCounterSelect = 0;
+  }
+
+  debounceCounterSelect++;
+
+  if ((currentTime - lastDebounceTimeSelect) > DEBOUNCE_DELAY && debounceCounterSelect > DEBOUNCE_COUNTER_MAX)
+  {
+    if (selectButtonState != lastSelectButtonState)
+    {
+      if (selectButtonState == LOW)
+      {
+        buttonPressStartTime = currentTime; // Start timer for button hold detection
+      }
+      else
+      {
+        currentDigitIdx = (currentDigitIdx + 1) % 8; // Move to next digit
+        buzz(SHORT_BUZZ_DURATION);                   // Short buzz for button release
+      }
+
+      lastSelectButtonState = selectButtonState;
+    }
+    else // Button is held down
+    {
+      if (lastSelectButtonState == LOW) // Ensure the button was previously pressed
+      {
+        if (currentTime - buttonPressStartTime > SAVE_PROMPT_DURATION)
+        {
+          save_CalibrationFactor(newCalibrationFactor);
+          calibration_factor = newCalibrationFactor;
+          Serial.println("Calibration factor saved.");
+          calibrationMode = false;
+          displayCalibrationFactor(calibration_factor); // Update display
+          buzz(LONG_BUZZ_DURATION);                     // Long buzz for button press
+          return;
+        }
+      }
+    }
+  }
+}
+
+void handleDefaultMode()
+{
+  bool selectButtonState = digitalRead(BUTTON_SELECT_PIN);
+  unsigned long currentTime = millis();
+
+  // Debounce logic for SELECT button
+  if (selectButtonState != debounceButtonStateSelect)
+  {
+    lastDebounceTimeSelect = currentTime;
+    debounceCounterSelect = 0;
+  }
+
+  debounceCounterSelect++;
+
+  if ((currentTime - lastDebounceTimeSelect) > DEBOUNCE_DELAY && debounceCounterSelect > DEBOUNCE_COUNTER_MAX)
+  {
+    if (selectButtonState != lastSelectButtonState)
+    {
+      if (selectButtonState == LOW)
+      {
+        buttonPressStartTime = currentTime; // Start timer for button hold detection
+      }
+      else
+      {
+        buzz(SHORT_BUZZ_DURATION); // Short buzz for button release
+      }
+
+      lastSelectButtonState = selectButtonState;
+    }
+    else // Button is held down
+    {
+      if (lastSelectButtonState == LOW) // Ensure the button was previously pressed
+      {
+        if (currentTime - buttonPressStartTime > CALIBRATION_MODE_DURATION)
+        {
+          calibrationMode = true;   // Enter calibration mode
+          buzz(LONG_BUZZ_DURATION); // Long buzz for button hold detection
+
+          Serial.println("Entered Calibration Mode");
+          currentDigitIdx = 0;
+          newCalibrationFactor = calibration_factor;
+          return;
+        }
+      }
+    }
+  }
+
+  // Handle weight reading
+  if ((currentTime - lastReadTime) > READ_DELAY)
+  {
+    if (scale.is_ready())
+    {
+      float weight = scale.get_units(SENSOR_READ_COUNT);
+      Serial.print("Weight: ");
+      Serial.print(weight, DISPLAY_DECIMAL);
+      Serial.println(" g");
+      lastReadTime = currentTime; // Update the last read time
+    }
+    else
+    {
+      Serial.println("HX711 not found.");
+    }
+  }
 }
 
 void setup()
@@ -104,21 +245,14 @@ void setup()
   pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
   pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
 
+  pinMode(BUZZER_PIN, OUTPUT); // Initialize buzzer pin
+
   EEPROM.begin();
 
   calibration_factor = load_CalibrationFactor();
-  sensorReadCount = load_SensorReadCount();
-  displayDecimal = load_DisplayDecimal();
-  loopDelay = load_LoopDelay();
 
   Serial.print("Loaded calibration factor: ");
   Serial.println(calibration_factor);
-  Serial.print("Loaded sensor read count: ");
-  Serial.println(sensorReadCount);
-  Serial.print("Loaded display decimal: ");
-  Serial.println(displayDecimal);
-  Serial.print("Loaded loop delay: ");
-  Serial.println(loopDelay);
 
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
   scale.set_scale(calibration_factor);
@@ -132,53 +266,13 @@ void setup()
 
 void loop()
 {
-  bool selectButtonState = digitalRead(BUTTON_SELECT_PIN);
-
-  if (selectButtonState == LOW && lastSelectButtonState == HIGH)
-  {
-    buttonPressStartTime = millis();
-  }
-  else if (selectButtonState == HIGH && lastSelectButtonState == LOW)
-  {
-    unsigned long pressDuration = millis() - buttonPressStartTime;
-
-    if (pressDuration > CALIBRATION_MODE_DURATION)
-    {
-      calibrationMode = !calibrationMode;
-      if (calibrationMode)
-      {
-        Serial.println("Entered Calibration Mode");
-        currentDigitIdx = 0;
-        newCalibrationFactor = calibration_factor;
-      }
-      else
-      {
-        Serial.println("Exited Calibration Mode");
-        displayCalibrationFactor(calibration_factor); // Update display
-      }
-    }
-  }
-
-  lastSelectButtonState = selectButtonState;
-
   if (calibrationMode)
   {
     handleCalibrationMode();
   }
   else
   {
-    if (scale.is_ready())
-    {
-      float weight = scale.get_units(sensorReadCount);
-      Serial.print("Weight: ");
-      Serial.print(weight, displayDecimal);
-      Serial.println(" g");
-    }
-    else
-    {
-      Serial.println("HX711 not found.");
-    }
-
-    delay(loopDelay);
+    handleDefaultMode();
+    delay(LOOP_DELAY); // Delay between measurements
   }
 }
