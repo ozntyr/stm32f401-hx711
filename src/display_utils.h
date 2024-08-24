@@ -17,6 +17,6 @@ void clearDisplay();
 void printText(const char *text, int x, int y, int textSize, uint16_t color);
 void displayCalibrationFactor(float factor);
 void displayCalibrationFactor(float factor, int highlightIdx);
-void displaySavePrompt();
+void displayWeight(float weight);
 
 #endif // DISPLAY_UTILS_H

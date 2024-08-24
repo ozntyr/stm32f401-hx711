@@ -22,7 +22,7 @@ const int LONG_BUZZ_DURATION = 500;  // Duration for a long buzz (500ms)
 // Default values for settings
 #define DEFAULT_CALIBRATION_FACTOR 2280.0f
 #define SENSOR_READ_COUNT 10
-#define DISPLAY_DECIMAL 2
+#define DISPLAY_DECIMAL 3
 #define LOOP_DELAY 10
 #define READ_DELAY 500
 #define CALIBRATION_MODE_DURATION 2000 // Duration for calibration mode activation
@@ -88,9 +88,11 @@ void handleCalibrationMode()
       if (upButtonState == LOW)
       {
         // Increment the current digit
-        int factorAsInt = int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10;
-        factorAsInt = (factorAsInt + 1) % 10;
-        newCalibrationFactor += (factorAsInt - (int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10)) * pow(10, currentDigitIdx);
+        int tempVal = int(newCalibrationFactor * 1000);             // Multiply by 1000 for 3 decimal places
+        int digit = (int)(tempVal / pow(10, currentDigitIdx)) % 10; // Isolate the digit
+        int newDigit = (digit + 1) % 10;                            // Increase the digit
+        tempVal -= (digit - newDigit) * pow(10, currentDigitIdx);   // Replace the digit
+        newCalibrationFactor = float(tempVal) / 1000.0;             // Divide by 1000 to restore precision
         Serial.print("New calibration factor: ");
         Serial.println(newCalibrationFactor, 3);
         displayCalibrationFactor(newCalibrationFactor, currentDigitIdx); // Update display
@@ -116,9 +118,11 @@ void handleCalibrationMode()
       if (downButtonState == LOW)
       {
         // Decrement the current digit
-        int factorAsInt = int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10;
-        factorAsInt = (factorAsInt + 9) % 10;
-        newCalibrationFactor += (factorAsInt - (int(newCalibrationFactor * pow(10, currentDigitIdx)) % 10)) * pow(10, currentDigitIdx);
+        int tempVal = int(newCalibrationFactor * 1000);             // Multiply by 1000 for 3 decimal places
+        int digit = (int)(tempVal / pow(10, currentDigitIdx)) % 10; // Isolate the digit
+        int newDigit = (digit + 9) % 10;                            // Decrease the digit
+        tempVal -= (digit - newDigit) * pow(10, currentDigitIdx);   // Replace the digit
+        newCalibrationFactor = float(tempVal) / 1000.0;             // Divide by 1000 to restore precision
         Serial.print("New calibration factor: ");
         Serial.println(newCalibrationFactor, 3);
         displayCalibrationFactor(newCalibrationFactor, currentDigitIdx); // Update display
@@ -228,6 +232,10 @@ void handleDefaultMode()
       Serial.print("Weight: ");
       Serial.print(weight, DISPLAY_DECIMAL);
       Serial.println(" g");
+
+      // Update display with current weight
+      displayWeight(weight);
+
       lastReadTime = currentTime; // Update the last read time
     }
     else
