@@ -20,10 +20,6 @@ const int SHORT_BUZZ_DURATION = 100; // Duration for a short buzz (100ms)
 const int LONG_BUZZ_DURATION = 500;  // Duration for a long buzz (500ms)
 
 // Default values for settings
-#define DEFAULT_CALIBRATION_FACTOR 2280.0f
-#define SENSOR_READ_COUNT 10
-#define DISPLAY_DECIMAL 3
-#define LOOP_DELAY 10
 #define READ_DELAY 500
 #define CALIBRATION_MODE_DURATION 2000 // Duration for calibration mode activation
 #define SAVE_PROMPT_DURATION 2000      // Duration for save prompt display
