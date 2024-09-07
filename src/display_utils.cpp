@@ -1,9 +1,11 @@
 #include "display_utils.h"
 #include <Adafruit_ILI9341.h>
 #include <Adafruit_GFX.h>
+#include "pins.h"
 
 // Initialize the ILI9341 display
-Adafruit_ILI9341 tft = Adafruit_ILI9341(PB9, PB8); // Adjust the pins as necessary
+// Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
 
 void initDisplay()
 {

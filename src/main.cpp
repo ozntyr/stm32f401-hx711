@@ -2,18 +2,7 @@
 #include <HX711.h>
 #include "eeprom_utils.h"
 #include "display_utils.h"
-
-// HX711 circuit wiring
-const int LOADCELL_DOUT_PIN = PA0;
-const int LOADCELL_SCK_PIN = PA1;
-
-// Button pins
-const int BUTTON_SELECT_PIN = PA2;
-const int BUTTON_UP_PIN = PA3;
-const int BUTTON_DOWN_PIN = PA4;
-
-// Buzzer pin
-const int BUZZER_PIN = PA5;
+#include "pins.h"
 
 // Buzzer durations
 const int SHORT_BUZZ_DURATION = 100; // Duration for a short buzz (100ms)
